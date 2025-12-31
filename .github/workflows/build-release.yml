@@ -1,0 +1,79 @@
+name: Build and Release Barrel
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+# Permissions to allow creating releases
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Connect IQ SDK
+        uses: garmin/connectiq-action@v0.1
+        with:
+          sdks: '8.4.0' # Adjust SDK version if needed
+
+      - name: Generate Dummy Developer Key
+        # MonkeyC requires a private key to build, even for barrels.
+        # We generate a temporary one on the fly.
+        run: openssl genrsa -out developer_key.pem 4096
+
+      - name: Build Barrel
+        run: |
+          monkeyc \
+            --warn \
+            --output bin/MonkeyUtils.barrel \
+            --jungles monkey.jungle \
+            --private-key developer_key.pem \
+            --build-release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonkeyUtils-Barrel
+          path: bin/MonkeyUtils.barrel
+          retention-days: 5
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Setup Connect IQ SDK
+        uses: garmin/connectiq-action@v0.1
+        with:
+          sdks: '8.4.0'
+
+      - name: Generate Dummy Developer Key
+        run: openssl genrsa -out developer_key.pem 4096
+
+      - name: Build Final Release Barrel
+        run: |
+          monkeyc \
+            --warn \
+            --output bin/MonkeyUtils.barrel \
+            --jungles monkey.jungle \
+            --private-key developer_key.pem \
+            --build-release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bin/MonkeyUtils.barrel
+          generate_release_notes: true
