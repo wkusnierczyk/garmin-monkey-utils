@@ -145,16 +145,7 @@ This project uses a `Makefile` for building, testing, and packaging.
 | `make clean` | Removes build artifacts (`bin/`, `gen/`). |
 | `make docs` | Generates HTML documentation using `monkeydoc`. |
 
-### Automated Testing (CI)
-This repository includes a **GitHub Action** workflow that:
-1.  Builds the barrel on every push to `main`.
-2.  Automatically creates a GitHub Release with the `.barrel` artifact when a tag (e.g., `v1.0.0`) is pushed.
 
-To release:
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
 
 ## License
 
