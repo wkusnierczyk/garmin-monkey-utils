@@ -5,6 +5,7 @@ bin/
 mir/
 internal-mir/
 external-mir/
+
 # Generated source code (if any)
 gen/
 
@@ -15,6 +16,9 @@ gen/
 # Log files
 logs/
 *.log
+
+# --- Testing ---
+test_runner.prg
 
 # --- VS Code & IDE ---
 # Local workspace settings (optional: remove this if you want to share launch configs)

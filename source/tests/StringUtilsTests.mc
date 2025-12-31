@@ -10,7 +10,7 @@ module MonkeyUtils {
     module StringUtils {
 
         (:public)
-        module SplitterTests {
+        module StringSplitterTests {
 
             const TEST_NAME_KEY = "name";
             const TEST_INPUT_KEY = "input";
@@ -62,7 +62,7 @@ module MonkeyUtils {
             }        
 
             (:test)
-            function testStringUtilsSplitters(logger as Test.Logger) as Boolean {
+            function test(logger as Test.Logger) as Boolean {
 
                 var passed = true;
                 
