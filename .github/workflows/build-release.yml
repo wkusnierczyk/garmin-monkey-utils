@@ -2,7 +2,7 @@ name: Update SDKs
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -12,54 +12,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Fetch the official list of SDKs
+      - name: Fetch and Parse SDK List
         id: fetch_sdk
         shell: bash
         run: |
-          # 1. Define the Source URL (Replace with your actual URL)
-          SDK_URL="YOUR_JSON_SOURCE_URL_HERE"
+          # --- CONFIGURATION ---
+          # 1. Official Garmin SDK Feed
+          SDK_LIST_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
+          BASE_DOWNLOAD_URL="https://developer.garmin.com/downloads/connect-iq/sdks/"
           
-          echo "Fetching SDK list from: $SDK_URL"
+          echo "Fetching SDK list from: $SDK_LIST_URL"
           
-          # 2. Fetch the content
-          RESPONSE=$(curl -sL "$SDK_URL")
+          # 2. Fetch content
+          RESPONSE=$(curl -sL "$SDK_LIST_URL")
           
-          # 3. DEBUG: Check if response is valid JSON (Optional but recommended)
-          if ! echo "$RESPONSE" | jq empty; then
-            echo "::error::Failed to parse JSON response"
-            echo "$RESPONSE" | head -n 10
+          # 3. Extract the Linux SDK filename
+          # The JSON is an array of objects. We take the first one (usually latest) 
+          # and select the "linux" key.
+          SDK_FILENAME=$(echo "$RESPONSE" | jq -r '.[0].linux // empty')
+
+          if [ -z "$SDK_FILENAME" ] || [ "$SDK_FILENAME" == "null" ]; then
+            echo "::error::Could not find a 'linux' SDK entry in the JSON."
+            echo "DEBUG: First item keys: $(echo "$RESPONSE" | jq '.[0] | keys')"
             exit 1
           fi
 
-          # 4. Extract URL (THE FIX IS HERE)
-          # We use '.[]' instead of '.sdks[]' because the root is an array.
-          # This example grabs the URL of the *first* item in the list.
-          # Adjust the select() logic if you need a specific version.
-          
-          DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.[0].url // empty')
-          
-          # Alternative: If you need to find a specific match, e.g., linux version:
-          # DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.[] | select(.platform=="linux") | .url' | head -n 1)
+          # 4. Construct Full URL
+          # Garmin's JSON usually returns just the filename (e.g., "connectiq-sdk-lin-4.2.4.zip")
+          DOWNLOAD_URL="${BASE_DOWNLOAD_URL}${SDK_FILENAME}"
 
-          if [ -z "$DOWNLOAD_URL" ]; then
-            echo "::error::Could not extract a download URL. Check jq logic."
-            # Debug: print structure to see keys
-            echo "$RESPONSE" | jq '.[0] | keys'
-            exit 1
-          fi
-
-          echo "Found SDK URL: $DOWNLOAD_URL"
+          echo "Found SDK Filename: $SDK_FILENAME"
+          echo "Full Download URL: $DOWNLOAD_URL"
+          
+          # 5. Output for next steps
           echo "url=$DOWNLOAD_URL" >> $GITHUB_OUTPUT
 
       - name: Download SDK
         run: |
           URL="${{ steps.fetch_sdk.outputs.url }}"
-          echo "Downloading SDK from: $URL"
           
           if [ -z "$URL" ]; then
-            echo "Error: URL is empty"
+            echo "::error::No URL passed from previous step."
             exit 1
           fi
           
+          echo "Downloading from: $URL"
           wget -q "$URL" -O sdk_archive.zip
+          
+          echo "Download complete. File size:"
           ls -lh sdk_archive.zip
