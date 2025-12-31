@@ -1,0 +1,46 @@
+[
+    {
+        "delimiter": ",",
+        "expected": [
+            "One",
+            "Two",
+            "Three"
+        ],
+        "id": "S01",
+        "input": "One,Two,Three",
+        "name": "Simple comma"
+    },
+    {
+        "delimiter": ",",
+        "expected": [
+            "A",
+            "",
+            "B"
+        ],
+        "id": "S02",
+        "input": "A,,B",
+        "name": "Consecutive"
+    },
+    {
+        "delimiter": ":",
+        "expected": [
+            "",
+            "abc",
+            "de"
+        ],
+        "id": "S03",
+        "input": ":abc:de",
+        "name": "Leading delimiter"
+    },
+    {
+        "delimiter": ":",
+        "expected": [
+            "abc",
+            "de",
+            ""
+        ],
+        "id": "S04",
+        "input": "abc:de:",
+        "name": "Trailing delimiter"
+    }
+]

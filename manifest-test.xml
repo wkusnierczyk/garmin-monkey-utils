@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
+    <iq:application id="e0d8a255-0665-4221-be26-ef5d14c441b4" type="watch-app" name="@Strings.AppName" entry="MonkeyUtils.MonkeyUtilsTestApp" minApiLevel="3.0.0">
+        <iq:products>
+            <iq:product id="fenix7xpronowifi"/>
+        </iq:products>
+        <iq:permissions />
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+        <iq:barrels />
+    </iq:application>
+</iq:manifest>

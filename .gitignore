@@ -4,6 +4,7 @@ bin/
 # Monkey C Intermediate Representation files
 mir/
 internal-mir/
+external-mir/
 # Generated source code (if any)
 gen/
 

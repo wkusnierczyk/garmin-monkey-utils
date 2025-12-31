@@ -1,0 +1,4 @@
+<resources>
+    <jsonData id="StringUtilsSplitTestCases" filename="stringutils_split_tests.json" />
+    <jsonData id="ArrayUtilsTestCases" filename="arrayutils_tests.json" />
+</resources>
