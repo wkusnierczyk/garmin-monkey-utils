@@ -1,110 +1,78 @@
-name: Build and Release Barrel
+name: Build Garmin Barrel
 
 on:
   push:
-    branches: ["**"]
-    tags: ["v*"]
-  workflow_dispatch:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build-barrel:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    # 1. Check out your code
+    - uses: actions/checkout@v4
 
-      # --- 1. INSTALL SDK ---
-      - name: Fetch and Install SDK
-        id: install_sdk
-        shell: bash
-        run: |
-          SDK_LIST_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
-          BASE_URL="https://developer.garmin.com/downloads/connect-iq/sdks/"
-          
-          echo "Fetching SDK list..."
-          RESPONSE=$(curl -sL "$SDK_LIST_URL")
-          
-          # Find latest Linux version (Semantic Versioning Sort)
-          LATEST_ENTRY=$(echo "$RESPONSE" | jq 'map(select(.linux != null)) | sort_by(.version | split(".") | map(tonumber)) | last')
-          FILENAME=$(echo "$LATEST_ENTRY" | jq -r '.linux')
-          
-          if [ -z "$FILENAME" ] || [ "$FILENAME" == "null" ]; then
-            echo "::error::Could not find SDK filename."
-            exit 1
-          fi
+    # 2. Setup Java (Required for Garmin SDK tools)
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-          FULL_URL="${BASE_URL}${FILENAME}"
-          echo "Downloading SDK: $FILENAME"
-          
-          wget -q "$FULL_URL" -O sdk.zip
-          unzip -q sdk.zip -d sdk_extracted
-          
-          # Find path to barrelbuild to locate the BIN directory
-          BARRELBUILD_PATH=$(find sdk_extracted -name "barrelbuild" -type f | head -n 1)
-          SDK_BIN_DIR=$(dirname "$BARRELBUILD_PATH")
-          
-          echo "sdk_bin=$SDK_BIN_DIR" >> $GITHUB_OUTPUT
+    # 3. Download and Extract the Connect IQ SDK
+    - name: Install Connect IQ SDK
+      run: |
+        # Use a specific recent SDK version (Check developer.garmin.com for latest)
+        SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-7.4.3-2024-12-11-6b2089601.zip"
+        
+        wget -q -O sdk.zip $SDK_URL
+        unzip -q sdk.zip -d sdk_extracted
+        
+        # Make the binaries executable
+        chmod +x sdk_extracted/bin/*
+        
+        # Initialize the global config file so sdkmanager knows where to write
+        # (This prevents some "path not found" errors)
+        mkdir -p ~/.Garmin/ConnectIQ
+        echo "current-sdk=$(pwd)/sdk_extracted" > ~/.Garmin/ConnectIQ/current-sdk.cfg
 
-      # --- 2. INSTALL DEVICES (THE FIX) ---
-      - name: Install Required Devices
-        shell: bash
-        run: |
-          # 1. Setup the directory structure Garmin expects
-          mkdir -p $HOME/.Garmin/ConnectIQ/Devices
-          
-          # 2. Download a helper script that parses manifest.xml and downloads devices
-          # Source: https://github.com/flocsy/garmin-dev-tools
-          wget -q https://raw.githubusercontent.com/flocsy/garmin-dev-tools/main/cj-download-devices.sh
-          chmod +x cj-download-devices.sh
-          
-          echo "Parsing manifest.xml and downloading devices..."
-          # Arguments: <manifest_file> <output_dir> <token_is_optional>
-          ./cj-download-devices.sh manifest.xml $HOME/.Garmin/ConnectIQ/Devices
-          
-          echo "Devices installed:"
-          ls $HOME/.Garmin/ConnectIQ/Devices
+    # 4. Generate a Developer Key (Required for signing/building)
+    - name: Generate Developer Key
+      run: |
+        openssl genrsa -out developer_key.pem 4096
+        openssl pkcs8 -topk8 -inform PEM -outform DER -in developer_key.pem -out developer_key.der -nocrypt
 
-      # --- 3. BUILD BARREL ---
-      - name: Build Barrel
-        id: build
-        run: |
-          SDK_BIN="${{ steps.install_sdk.outputs.sdk_bin }}"
-          BARREL_NAME="MonkeyUtils.barrel"
-          JUNGLE_FILE="monkey.jungle"
-          
-          chmod +x "$SDK_BIN/barrelbuild"
-          
-          echo "Building $BARREL_NAME..."
-          
-          # Build command
-          "$SDK_BIN/barrelbuild" \
-            -o "$BARREL_NAME" \
-            -f "$JUNGLE_FILE"
-          
-          if [ -f "$BARREL_NAME" ]; then
-            echo "Build success! File size:"
-            ls -lh "$BARREL_NAME"
-            echo "barrel_path=$BARREL_NAME" >> $GITHUB_OUTPUT
-          else
-            echo "::error::Build failed. $BARREL_NAME was not created."
-            exit 1
-          fi
+    # 5. [NEW] Download Target Devices
+    # This parses manifest.xml for 'iq:product id' and passes them to sdkmanager
+    - name: Download Devices
+      run: |
+        # Create the standard device directory
+        mkdir -p ~/.Garmin/ConnectIQ/Devices
+        
+        # Extract device IDs from manifest.xml (e.g., "fr245 fenix6")
+        # Adjust 'manifest.xml' path if your file is in a subdirectory
+        DEVICES=$(grep 'iq:product id' manifest.xml | sed 's/.*id="\([^"]*\)".*/\1/' | tr '\n' ' ')
+        
+        echo "Detected devices in manifest: $DEVICES"
+        
+        if [ -z "$DEVICES" ]; then
+          echo "Error: No devices found in manifest.xml!"
+          exit 1
+        fi
+        
+        # Download the devices (pipe 'yes' to accept any licenses automatically)
+        yes | ./sdk_extracted/bin/sdkmanager --download $DEVICES
 
-      # --- 4. UPLOAD ARTIFACT ---
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MonkeyUtils-Barrel
-          path: ${{ steps.build.outputs.barrel_path }}
-
-      # --- 5. RELEASE (Tags Only) ---
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ${{ steps.build.outputs.barrel_path }}
-          draft: false
-          prerelease: false
+    # 6. Build the Barrel
+    - name: Build Monkey Barrel
+      run: |
+        # Ensure the output directory exists if needed
+        mkdir -p bin
+        
+        # Run the build command
+        java -jar sdk_extracted/bin/barrelbuild.jar \
+          -o bin/MonkeyUtils.barrel \
+          -f monkey.jungle \
+          -y developer_key.der
