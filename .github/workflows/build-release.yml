@@ -27,26 +27,29 @@ jobs:
 
       - name: Install Connect IQ SDK
         run: |
-          # 1. Fetch the official list of SDKs
           SDK_JSON_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
           
-          # 2. Extract the URL for the latest 'linux' SDK using jq
-          #    (sorts by date if needed, but the feed usually lists newest first)
-          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | .url' | head -n 1)
+          # 1. Fetch JSON
+          # 2. Filter for 'linux'
+          # 3. Sort by '.date' (ISO 8601 strings sort correctly)
+          # 4. Reverse (newest first)
+          # 5. Pick the first object and extract .url
+          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | sort_by(.date) | reverse | .[0] | .url')
           
+          if [ -z "$SDK_URL" ] || [ "$SDK_URL" == "null" ]; then
+            echo "❌ Error: Could not find a valid Linux SDK url in sdks.json"
+            exit 1
+          fi
+
           echo "Downloading SDK from: $SDK_URL"
           wget -q -O sdk.zip "$SDK_URL"
           
-          # 3. Unzip and setup paths
           unzip -q sdk.zip -d ciq-sdk
-          
-          # 4. Find the dynamic directory name (e.g., connectiq-sdk-lin-7.4.3-...)
           SDK_DIR=$(find ciq-sdk -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
           
           echo "SDK installed at: $SDK_DIR"
           echo "$PWD/$SDK_DIR/bin" >> $GITHUB_PATH
           
-          # 5. Make binaries executable
           chmod +x "$SDK_DIR/bin/monkeyc"
           chmod +x "$SDK_DIR/bin/monkeydo"
 
@@ -87,7 +90,9 @@ jobs:
       - name: Install Connect IQ SDK
         run: |
           SDK_JSON_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
-          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | .url' | head -n 1)
+          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | sort_by(.date) | reverse | .[0] | .url')
+          
+          echo "Downloading Release SDK from: $SDK_URL"
           wget -q -O sdk.zip "$SDK_URL"
           unzip -q sdk.zip -d ciq-sdk
           SDK_DIR=$(find ciq-sdk -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
