@@ -1,132 +1,162 @@
-# MonkeyUtils Barrel
+# MonkeyUtils
 
-A collection of utility modules for Monkey C (Garmin Connect IQ) development. 
+A robust, testable utility library for Garmin Connect IQ (Monkey C) development. 
+This barrel provides functionality for string manipulation, array operations, and a unified iterator pattern to simplify collection processing.
 
-This barrel provides:
-* robust string manipulation;
-* safe property retrieval to simplify app development.
-
-
-> This barrel does not aim at exhaustive treatment of all functionality on `String` and `Property` objects.
->
+> **Note** This barrel does not aim at exhaustive treatment of all functionality on `String` and `Property` objects.
 > It was created and is maintained as a **Build What You Need** (BWYN) project, conceived while developing specific Garmin Connect IQ SDK projects (see [Garmin Watch Faces](https://github.com/wkusnierczyk/garmin-watch-faces)).
-> It is offered _as is_, and may or may not grow in coverage over time.
+>
+> `MonkeyUtils` is offered _as is_, and may or may not grow in coverage over time.
 
----
+## Features
 
+* **StringUtils**
+    * Consistent Splitting: Handles leading/trailing empty tokens consistently (e.g., `":a:"` -> `["", "a", ""]`).
+    * LazySplitter: Memory-efficient, iterator-based splitting for large strings.
+    * EagerSplitter: Standard array-based splitting inheriting the same robust logic.
+* **ArrayUtils**
+    * Deep Equality: `equal()` checks content deep equality (recursive), unlike standard identity checks.
+    * ArrayIterator: Iterate over standard arrays using the unified `Iterator` interface.
+* **ContainerUtils**
+    * Iterator Interface: A polymorphic contract allowing you to write generic logic that consumes data from Arrays, Strings, or custom collections interchangeably.
+* **PropertyUtils**:
+    * Convenience functionality to load properties with resorting to defaults upon failure.
+    * `getPropertyElseDefault()` safely retrieves Application Properties, handling missing keys or API exceptions by returning a fallback value.
+* **Tested**: unit-tested with matrix verification against edge cases.
 
-## Table of Contents
-1. [Installation](#installation)
-2. [Configuration](#configuration)
-3. [Usage](#usage)
-4. [Documentation](#documentation)
 
 ## Installation
 
-### 1. Add Submodule
-Add this repository as a submodule to your project to keep it versioned and easy to update.
+### Option A: As a Monkey Barrel (Recommended)
 
-```bash
-cd {your garmin project root}
+1.  Download the latest `MonkeyUtils.barrel` from the [Releases](../../releases) page.
+2.  Place the file in your project's root directory (or a `barrels/` subfolder).
+3.  Open your project in VS Code.
+4.  Run the command: `Monkey C: Configure Monkey Barrels`.
+5.  Select `MonkeyUtils.barrel` from the list.
 
-git submodule add https://github.com/wkusnierczyk/garmin-monkey-utils.git barrels/MonkeyUtils
-```
-
-### 2. Build the Barrel
-Before you can use it, you must build the `.barrel` file.
-
-```bash
-cd barrels/MonkeyUtils
-
-# Build MonkeyUtils.barrel
-make build
-```
-
----
-
-## Configuration
-
-To make your app "see" the barrel, you must edit two files in your project root.
-
-### `monkey.jungle`
-Tell the compiler where to look for barrels. Add the `base.barrelPath` line:
-
-```properties
-project.manifest = manifest.xml
-
-# Add the path to the directory containing the .barrel file
-base.barrelPath = $(base.barrelPath);barrels/MonkeyUtils
-```
-
-### `manifest.xml`
-Declare that your app depends on this specific barrel.
-
+Alternatively, edit your `manifest.xml` manually through the UI or directly in the XML code:
 ```xml
-<iq:manifest version="3" xmlns:iq="[http://www.garmin.com/xml/connectiq](http://www.garmin.com/xml/connectiq)">
-    <iq:application ...>
-        
-        <iq:depends>
-            <!-- Use the appropriate version -->
-            <iq:barrel module="MonkeyUtils" version="0.1.0"/>
-        </iq:depends>
-
-    </iq:application>
-</iq:manifest>
+<iq:barrels>
+    <iq:barrel filename="MonkeyUtils.barrel" />
+</iq:barrels>
 ```
 
----
+### Option B: As a Git Submodule
+
+If you prefer source integration:
+
+1.  Add this repo as a submodule:
+    ```bash
+    git submodule add (https://github.com/wkusnierczyk/garmin-monkey-utls.git) modules/MonkeyUtils
+    ```
+2.  Add the source paths to your `monkey.jungle`:
+    ```properties
+    # Add MonkeyUtils source to your project
+    base.sourcePath = source;modules/MonkeyUtils/source
+    ```
 
 ## Usage
 
-Once configured, you can import the module in your `.mc` files.
+### 1. String Splitting
 
-### Property Utilities
-Safely retrieve properties without crashing on missing keys or null values.
+Consistent behavior for Eager (fast) or Lazy (memory-efficient) splitting.
 
 ```monkeyc
-using MonkeyUtils.PropertyUtils;
+import MonkeyUtils;
 
-// Inside your class
-function onLoad() {
-    // Returns the value of "MySetting" or false if it doesn't exist/is null
-    var mySetting = PropertyUtils.getPropertyElseDefault("MySetting", false);
-    
-    System.println("Setting is: " + mySetting);
+// 1. Static (Eager) - Simple & standard
+var parts = StringUtils.split("A,B,C", ","); 
+
+// 2. Lazy Iterator - Best for long strings or memory constraints
+var splitter = new StringUtils.LazySplitter("A,B,C", ",");
+while (splitter.hasNext()) {
+    System.println(splitter.next()); // Prints "A", then "B", then "C"
 }
 ```
 
-### String Utilities
-Use `StringUtils` to split strings. You can choose between **Eager** (fast, more memory) or **Lazy** (slower, less memory) splitting.
+### 2. Iterators & Polymorphism
+
+Use the unified `Iterator` interface to process any collection generically.
 
 ```monkeyc
-import MonkeyUtils.StringUtils;
+import MonkeyUtils;
 
-function parseData() {
-    var rawData = "10,20,30,40";
-    
-    // METHOD 1: Simple Array Split (Eager)
-    // Allocates an Array containing all substrings immediately.
-    var parts = StringUtils.split(rawData, ",");
-    
-    // METHOD 2: Lazy Splitter (Memory Efficient)
-    // Allocates substrings only as requested. 
-    // Uses less peak memory than EagerSplitter because it avoids the Array overhead,
-    // though it still holds the "remaining" string in memory.
-    // Note that the remaining string is shrinking with each call to next() 
-    // (unlike in the EagerSplitter, which maintains the full array at all times).
-    var splitter = new StringUtils.LazySplitter(rawData, ",");
-    
-    while(splitter.hasNext()) {
-        var token = splitter.next();
-        System.println("Token: " + token);
+// Convert a standard Array into an Iterator
+var myData = ["One", "Two", "Three"];
+var iter = ArrayUtils.getIterator(myData);
+
+processItems(iter);
+
+// Works with Splitters too!
+var splitIter = new StringUtils.EagerSplitter("One,Two,Three", ",");
+processItems(splitIter);
+
+// Generic processor that doesn't care about the source
+function processItems(iter as ContainerUtils.Iterator) {
+    while (iter.hasNext()) {
+        System.println(iter.next());
     }
 }
 ```
 
-## Documentation
-To generate the full HTML API documentation for this barrel:
+### 3. Array Deep Equality
 
-```bash
-monkeydoc -o docs -f monkey.jungle source/**/*.mc
+Standard Monkey C `equals` often checks reference identity. Use `ArrayUtils` for content verification.
+
+```monkeyc
+var a = [1, [2, 3]];
+var b = [1, [2, 3]];
+
+// Returns true only if content matches recursively
+if (ArrayUtils.equal(a, b)) {
+    System.println("Arrays are identical in content!");
+}
 ```
-Open `docs/index.html` in your web browser to view the generated reference.
+
+### 4. Safe Property Access
+
+Retrieve settings safely without crashing on missing keys.
+
+```monkeyc
+import MonkeyUtils;
+
+// Retrieve "my_setting_id". If it doesn't exist (or throws an error), return 10.
+var limit = PropertyUtils.getPropertyElseDefault("my_setting_id", 10);
+
+var name = PropertyUtils.getPropertyElseDefault("user_name", "Guest");
+```
+
+## Build & Test
+
+This project uses a `Makefile` for building, testing, and packaging.
+
+### Prerequisites
+* Garmin Connect IQ SDK installed.
+* `monkeyc` and `monkeydo` in your PATH.
+* `jq` (for test data validation).
+
+### Commands
+
+| Command | Description |
+| :--- | :--- |
+| `make build` | Compiles the barrel file (`bin/MonkeyUtils.barrel`). |
+| `make test` | Validates JSON data, builds tests, and runs the matrix test suite in the simulator. |
+| `make clean` | Removes build artifacts (`bin/`, `gen/`). |
+| `make docs` | Generates HTML documentation using `monkeydoc`. |
+
+### Automated Testing (CI)
+This repository includes a **GitHub Action** workflow that:
+1.  Builds the barrel on every push to `main`.
+2.  Automatically creates a GitHub Release with the `.barrel` artifact when a tag (e.g., `v1.0.0`) is pushed.
+
+To release:
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+## License
+
+[MIT License](LICENSE)
+
