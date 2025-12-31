@@ -2,15 +2,15 @@ name: Build and Release Barrel
 
 on:
   push:
-    branches: ["**"]       # Build on every branch push
-    tags: ["v*"]           # Release on tags starting with 'v'
-  workflow_dispatch:       # Manual trigger button
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   build-barrel:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # Required to create releases
+      contents: write
     
     steps:
       - name: Checkout code
@@ -23,60 +23,80 @@ jobs:
           SDK_LIST_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
           BASE_URL="https://developer.garmin.com/downloads/connect-iq/sdks/"
           
-          echo "Fetching SDK list..."
+          # 1. Fetch SDK List
           RESPONSE=$(curl -sL "$SDK_LIST_URL")
           
-          # Find latest Linux version (Semantic Versioning Sort)
+          # 2. Find latest Linux version (Semantic Sort)
           LATEST_ENTRY=$(echo "$RESPONSE" | jq 'map(select(.linux != null)) | sort_by(.version | split(".") | map(tonumber)) | last')
           FILENAME=$(echo "$LATEST_ENTRY" | jq -r '.linux')
           
           if [ -z "$FILENAME" ] || [ "$FILENAME" == "null" ]; then
-            echo "::error::Could not find SDK filename."
+            echo "::error::Could not find SDK filename in JSON."
             exit 1
           fi
 
           FULL_URL="${BASE_URL}${FILENAME}"
-          echo "Downloading SDK from: $FULL_URL"
+          echo "Downloading SDK: $FILENAME"
           
+          # 3. Download and Unzip
           wget -q "$FULL_URL" -O sdk.zip
           unzip -q sdk.zip -d sdk_extracted
           
-          # Locate the inner SDK folder
-          SDK_ROOT=$(find sdk_extracted -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
-          echo "SDK installed at: $SDK_ROOT"
-          echo "sdk_root=$SDK_ROOT" >> $GITHUB_OUTPUT
+          # 4. ROBUST PATH FINDING (The Fix)
+          # Instead of guessing the folder name, we find the 'barrelbuild' tool directly.
+          BARRELBUILD_PATH=$(find sdk_extracted -name "barrelbuild" -type f | head -n 1)
+          
+          if [ -z "$BARRELBUILD_PATH" ]; then
+             echo "::error::Could not find 'barrelbuild' executable inside the extracted zip."
+             # Debug: List files to see what happened
+             find sdk_extracted -maxdepth 3
+             exit 1
+          fi
+          
+          # Get the directory containing the tool (the 'bin' folder)
+          SDK_BIN_DIR=$(dirname "$BARRELBUILD_PATH")
+          
+          echo "Found barrelbuild at: $BARRELBUILD_PATH"
+          echo "Setting SDK BIN to: $SDK_BIN_DIR"
+          
+          # Output just the bin directory for the next step
+          echo "sdk_bin=$SDK_BIN_DIR" >> $GITHUB_OUTPUT
 
       - name: Build Barrel
         id: build
         run: |
-          SDK_BIN="${{ steps.install_sdk.outputs.sdk_root }}/bin"
+          # Use the path discovered in the previous step
+          SDK_BIN="${{ steps.install_sdk.outputs.sdk_bin }}"
           BARREL_NAME="MonkeyUtils.barrel"
           JUNGLE_FILE="monkey.jungle"
           
-          # Ensure build tool is executable
+          echo "Using SDK Bin: $SDK_BIN"
+          
+          # Make the tool executable
           chmod +x "$SDK_BIN/barrelbuild"
           
           echo "Building $BARREL_NAME..."
           
-          # Build command (No developer key)
           "$SDK_BIN/barrelbuild" \
             -o "$BARREL_NAME" \
             -f "$JUNGLE_FILE"
           
-          echo "Build success!"
-          ls -lh "$BARREL_NAME"
-          
-          # Output path for next steps
-          echo "barrel_path=$BARREL_NAME" >> $GITHUB_OUTPUT
+          # Verify success
+          if [ -f "$BARREL_NAME" ]; then
+            echo "Build success! File size:"
+            ls -lh "$BARREL_NAME"
+            echo "barrel_path=$BARREL_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Build failed. $BARREL_NAME was not created."
+            exit 1
+          fi
 
-      # --- Upload Artifact (Runs on every push) ---
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: MonkeyUtils-Barrel
           path: ${{ steps.build.outputs.barrel_path }}
 
-      # --- Create Release (Runs ONLY on Tag push) ---
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
