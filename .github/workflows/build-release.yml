@@ -8,7 +8,6 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# Grant permission to create Releases
 permissions:
   contents: write
 
@@ -28,19 +27,30 @@ jobs:
 
       - name: Install Connect IQ SDK
         run: |
-          # 1. Download the Linux SDK (Update version/URL as needed)
-          SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-7.4.3-2024-12-11-5d97f268f.zip"
-          wget -q -O sdk.zip $SDK_URL
+          # 1. Fetch the official list of SDKs
+          SDK_JSON_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
           
-          # 2. Unzip and setup paths
+          # 2. Extract the URL for the latest 'linux' SDK using jq
+          #    (sorts by date if needed, but the feed usually lists newest first)
+          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | .url' | head -n 1)
+          
+          echo "Downloading SDK from: $SDK_URL"
+          wget -q -O sdk.zip "$SDK_URL"
+          
+          # 3. Unzip and setup paths
           unzip -q sdk.zip -d ciq-sdk
-          echo "$PWD/ciq-sdk/bin" >> $GITHUB_PATH
-          chmod +x ciq-sdk/bin/monkeyc
-          chmod +x ciq-sdk/bin/monkeydo
+          
+          # 4. Find the dynamic directory name (e.g., connectiq-sdk-lin-7.4.3-...)
+          SDK_DIR=$(find ciq-sdk -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
+          
+          echo "SDK installed at: $SDK_DIR"
+          echo "$PWD/$SDK_DIR/bin" >> $GITHUB_PATH
+          
+          # 5. Make binaries executable
+          chmod +x "$SDK_DIR/bin/monkeyc"
+          chmod +x "$SDK_DIR/bin/monkeydo"
 
       - name: Generate Dummy Developer Key
-        # The compiler requires a private key, even for Barrels. 
-        # Since barrels aren't signed for the store, a temporary key works fine.
         run: openssl genrsa -out developer_key.pem 4096
 
       - name: Build Barrel
@@ -76,11 +86,13 @@ jobs:
 
       - name: Install Connect IQ SDK
         run: |
-          SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-7.4.3-2024-12-11-5d97f268f.zip"
-          wget -q -O sdk.zip $SDK_URL
+          SDK_JSON_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
+          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | .url' | head -n 1)
+          wget -q -O sdk.zip "$SDK_URL"
           unzip -q sdk.zip -d ciq-sdk
-          echo "$PWD/ciq-sdk/bin" >> $GITHUB_PATH
-          chmod +x ciq-sdk/bin/monkeyc
+          SDK_DIR=$(find ciq-sdk -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
+          echo "$PWD/$SDK_DIR/bin" >> $GITHUB_PATH
+          chmod +x "$SDK_DIR/bin/monkeyc"
 
       - name: Generate Dummy Developer Key
         run: openssl genrsa -out developer_key.pem 4096
