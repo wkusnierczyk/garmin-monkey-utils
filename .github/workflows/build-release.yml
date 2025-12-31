@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [ "main" ]
 
-# Permissions to allow creating releases
+# Grant permission to create Releases
 permissions:
   contents: write
 
@@ -20,14 +20,27 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Connect IQ SDK
-        uses: garmin/connectiq-action@v0.1
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
-          sdks: '8.4.0' # Adjust SDK version if needed
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Connect IQ SDK
+        run: |
+          # 1. Download the Linux SDK (Update version/URL as needed)
+          SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-7.4.3-2024-12-11-5d97f268f.zip"
+          wget -q -O sdk.zip $SDK_URL
+          
+          # 2. Unzip and setup paths
+          unzip -q sdk.zip -d ciq-sdk
+          echo "$PWD/ciq-sdk/bin" >> $GITHUB_PATH
+          chmod +x ciq-sdk/bin/monkeyc
+          chmod +x ciq-sdk/bin/monkeydo
 
       - name: Generate Dummy Developer Key
-        # MonkeyC requires a private key to build, even for barrels.
-        # We generate a temporary one on the fly.
+        # The compiler requires a private key, even for Barrels. 
+        # Since barrels aren't signed for the store, a temporary key works fine.
         run: openssl genrsa -out developer_key.pem 4096
 
       - name: Build Barrel
@@ -55,10 +68,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         
-      - name: Setup Connect IQ SDK
-        uses: garmin/connectiq-action@v0.1
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
-          sdks: '8.4.0'
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Connect IQ SDK
+        run: |
+          SDK_URL="https://developer.garmin.com/downloads/connect-iq/sdks/connectiq-sdk-lin-7.4.3-2024-12-11-5d97f268f.zip"
+          wget -q -O sdk.zip $SDK_URL
+          unzip -q sdk.zip -d ciq-sdk
+          echo "$PWD/ciq-sdk/bin" >> $GITHUB_PATH
+          chmod +x ciq-sdk/bin/monkeyc
 
       - name: Generate Dummy Developer Key
         run: openssl genrsa -out developer_key.pem 4096
