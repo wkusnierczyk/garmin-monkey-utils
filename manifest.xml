@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<iq:manifest version="1" xmlns:iq="http://www.garmin.com/xml/connectiq">
+    <iq:barrel id="e0d8a255-0665-4221-be26-ef5d14c441b4" module="MonkeyUtils" version="0.1.0" minApiLevel="3.0.0">
+        <iq:products/>
+        <iq:permissions/>
+        <iq:languages/>
+        <iq:barrels/>
+        <iq:annotations/>
+    </iq:barrel>
+</iq:manifest>

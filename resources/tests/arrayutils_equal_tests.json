@@ -1,0 +1,50 @@
+[
+    {
+        "expected": true,
+        "id": "A01",
+        "input": {
+            "that": [
+                1,
+                [
+                    2
+                ]
+            ],
+            "this": [
+                1,
+                [
+                    2
+                ]
+            ]
+        },
+        "name": "Nested Equality"
+    },
+    {
+        "expected": false,
+        "id": "A02",
+        "input": {
+            "that": [
+                1
+            ],
+            "this": [
+                1,
+                [
+                    2
+                ]
+            ]
+        },
+        "name": "Unequal sizes"
+    },
+    {
+        "expected": false,
+        "id": "A03",
+        "input": {
+            "that": [
+                2
+            ],
+            "this": [
+                1
+            ]
+        },
+        "name": "Unequal elements"
+    }
+]
