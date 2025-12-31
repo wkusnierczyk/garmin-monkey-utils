@@ -1,5 +1,8 @@
 import Toybox.Lang;
 
+using MonkeyUtils.ContainerUtils;
+
+
 (:public)
 module MonkeyUtils {
 
@@ -50,7 +53,7 @@ module MonkeyUtils {
          * Abstract base class defining the contract for string splitters.
          */
         (:public)
-        class Splitter {
+        class Splitter extends ContainerUtils.Iterator {
             
             var _string as String;
             var _delimiter as String;
@@ -61,6 +64,7 @@ module MonkeyUtils {
              * @param delimiter The delimiter to split by.
              */
             public function initialize(string as String, delimiter as String) {
+                Iterator.initialize();
                 self._string = string;
                 self._delimiter = delimiter;
             }
@@ -97,7 +101,7 @@ module MonkeyUtils {
              * @return The Splitter instance (for chaining).
              */
             (:public)
-            public function reset() as Splitter {
+            public function reset() {
                 return self;
             }
 

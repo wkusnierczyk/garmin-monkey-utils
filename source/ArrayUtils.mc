@@ -1,5 +1,8 @@
 import Toybox.Lang;
 
+using MonkeyUtils.ContainerUtils;
+
+
 (:public)
 module MonkeyUtils {
 
@@ -45,8 +48,49 @@ module MonkeyUtils {
             }
 
             return true;
+
+        }
+
+        /**
+         * Creates an Iterator for a standard Array.
+         * @param array The array to iterate over.
+         * @return A new Iterator instance.
+         */
+        (:public)
+        public function getIterator(array as Array) as ContainerUtils.Iterator {
+            return new ArrayIterator(array);
+        }
+
+        /**
+         * Private implementation of Iterator for Arrays.
+         */
+        class ArrayIterator extends ContainerUtils.Iterator {
+            var _array as Array;
+            var _index as Number;
+
+            public function initialize(array as Array) {
+                Iterator.initialize();
+                _array = array;
+                _index = -1;
+            }
+
+            public function hasNext() as Boolean {
+                return (_index + 1) < _array.size();
+            }
+
+            public function next() {
+                _index++;
+                if (_index < _array.size()) {
+                    return _array[_index];
+                }
+                return null;
+            }
+
+            public function reset() as Void {
+                _index = -1;
+            }
         }
 
     }
-    
+
 }
