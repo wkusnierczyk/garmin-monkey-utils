@@ -1,118 +1,65 @@
-name: Build and Release Barrel
+name: Update SDKs
 
 on:
   push:
-    branches: [ "main" ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ "main" ]
-
-permissions:
-  contents: write
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build:
+  update-sdk:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Install Connect IQ SDK
+      - name: Fetch the official list of SDKs
+        id: fetch_sdk
+        shell: bash
         run: |
-          SDK_JSON_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
+          # 1. Define the Source URL (Replace with your actual URL)
+          SDK_URL="YOUR_JSON_SOURCE_URL_HERE"
           
-          # 1. Fetch JSON
-          # 2. Filter for 'linux'
-          # 3. Sort by '.date' (ISO 8601 strings sort correctly)
-          # 4. Reverse (newest first)
-          # 5. Pick the first object and extract .url
-          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | sort_by(.date) | reverse | .[0] | .url')
+          echo "Fetching SDK list from: $SDK_URL"
           
-          if [ -z "$SDK_URL" ] || [ "$SDK_URL" == "null" ]; then
-            echo "❌ Error: Could not find a valid Linux SDK url in sdks.json"
+          # 2. Fetch the content
+          RESPONSE=$(curl -sL "$SDK_URL")
+          
+          # 3. DEBUG: Check if response is valid JSON (Optional but recommended)
+          if ! echo "$RESPONSE" | jq empty; then
+            echo "::error::Failed to parse JSON response"
+            echo "$RESPONSE" | head -n 10
             exit 1
           fi
 
-          echo "Downloading SDK from: $SDK_URL"
-          wget -q -O sdk.zip "$SDK_URL"
+          # 4. Extract URL (THE FIX IS HERE)
+          # We use '.[]' instead of '.sdks[]' because the root is an array.
+          # This example grabs the URL of the *first* item in the list.
+          # Adjust the select() logic if you need a specific version.
           
-          unzip -q sdk.zip -d ciq-sdk
-          SDK_DIR=$(find ciq-sdk -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
+          DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.[0].url // empty')
           
-          echo "SDK installed at: $SDK_DIR"
-          echo "$PWD/$SDK_DIR/bin" >> $GITHUB_PATH
-          
-          chmod +x "$SDK_DIR/bin/monkeyc"
-          chmod +x "$SDK_DIR/bin/monkeydo"
+          # Alternative: If you need to find a specific match, e.g., linux version:
+          # DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.[] | select(.platform=="linux") | .url' | head -n 1)
 
-      - name: Generate Dummy Developer Key
-        run: openssl genrsa -out developer_key.pem 4096
+          if [ -z "$DOWNLOAD_URL" ]; then
+            echo "::error::Could not extract a download URL. Check jq logic."
+            # Debug: print structure to see keys
+            echo "$RESPONSE" | jq '.[0] | keys'
+            exit 1
+          fi
 
-      - name: Build Barrel
+          echo "Found SDK URL: $DOWNLOAD_URL"
+          echo "url=$DOWNLOAD_URL" >> $GITHUB_OUTPUT
+
+      - name: Download SDK
         run: |
-          monkeyc \
-            --warn \
-            --output bin/MonkeyUtils.barrel \
-            --jungles monkey.jungle \
-            --private-key developer_key.pem \
-            --build-release
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MonkeyUtils-Barrel
-          path: bin/MonkeyUtils.barrel
-          retention-days: 5
-
-  release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Install Connect IQ SDK
-        run: |
-          SDK_JSON_URL="https://developer.garmin.com/downloads/connect-iq/sdks/sdks.json"
-          SDK_URL=$(curl -s $SDK_JSON_URL | jq -r '.sdks[] | select(.platform=="linux") | sort_by(.date) | reverse | .[0] | .url')
+          URL="${{ steps.fetch_sdk.outputs.url }}"
+          echo "Downloading SDK from: $URL"
           
-          echo "Downloading Release SDK from: $SDK_URL"
-          wget -q -O sdk.zip "$SDK_URL"
-          unzip -q sdk.zip -d ciq-sdk
-          SDK_DIR=$(find ciq-sdk -maxdepth 1 -type d -name "connectiq-sdk-*" | head -n 1)
-          echo "$PWD/$SDK_DIR/bin" >> $GITHUB_PATH
-          chmod +x "$SDK_DIR/bin/monkeyc"
-
-      - name: Generate Dummy Developer Key
-        run: openssl genrsa -out developer_key.pem 4096
-
-      - name: Build Final Release Barrel
-        run: |
-          monkeyc \
-            --warn \
-            --output bin/MonkeyUtils.barrel \
-            --jungles monkey.jungle \
-            --private-key developer_key.pem \
-            --build-release
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: bin/MonkeyUtils.barrel
-          generate_release_notes: true
+          if [ -z "$URL" ]; then
+            echo "Error: URL is empty"
+            exit 1
+          fi
+          
+          wget -q "$URL" -O sdk_archive.zip
+          ls -lh sdk_archive.zip
